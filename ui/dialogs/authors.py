@@ -5,9 +5,11 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, Q
 from PySide6.QtCore import Qt, Signal, QTimer, QDate
 from PySide6.QtGui import QFont, QIntValidator
 
-from ...core.enums import Country
-from ...core.additional_classes import NumericTableItem
-from ..styles import get_form_label_style
+from core.enums import Country
+from core.additional_classes import NumericTableItem
+from ui.styles import get_form_label_style
+
+from ui.widgets.search_widget import SearchWidget
 
 class AuthorsDialog(QDialog):
     """
@@ -48,6 +50,7 @@ class AuthorsDialog(QDialog):
                 QMessageBox.information(self, "Успех", "Автор успешно обновлен.")
             else:
                 QMessageBox.warning(self, "Ошибка", f"Не удалось обновить автора: {msg}")
+
     def setup_ui(self):
         layout = QVBoxLayout(self)
         title_label = QLabel("<h2>Авторы</h2>")
@@ -81,8 +84,16 @@ class AuthorsDialog(QDialog):
         buttons_layout.addWidget(close_btn)
         layout.addLayout(buttons_layout)
 
-    def update_authors_table(self):
-        self.authors = self.controller.get_authors()
+        self.search_widget = SearchWidget()
+        self.search_widget.searchRequested.connect(self.perform_search)
+        layout.addWidget(self.search_widget)
+
+    def update_authors_table(self, authors=None):
+        if authors is None:
+            self.authors = self.controller.get_authors()
+        else:
+            self.authors = authors
+
         self.author_table.setRowCount(len(self.authors))
         for i, auth in enumerate(self.authors):
             id_item = NumericTableItem(str(auth['author_id']), auth['author_id'])
@@ -139,6 +150,21 @@ class AuthorsDialog(QDialog):
                 QMessageBox.information(self, "Успех", "Автор успешно удален")
             else:
                 QMessageBox.warning(self, "Ошибка", f"Не удалось удалить автора: {msg}")
+
+    def perform_search(self, search_type, search_text):
+        """Выполнение поиска по авторам"""
+        if not search_text:
+            self.update_authors_table()  # Показать все записи
+            return
+
+        try:
+            # Поиск по фамилии (last_name)
+            authors = self.controller.search_authors("last_name", search_type, search_text)
+        
+            # Обновляем таблицу с результатами
+            self.update_authors_table(authors)
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при поиске: {str(e)}")
 
 class AddAuthorDialog(QDialog):
     """
@@ -313,4 +339,3 @@ class EditAuthorDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Выберите страну автора")
             return
         self.accept()
-

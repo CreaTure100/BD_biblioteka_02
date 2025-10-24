@@ -4,13 +4,15 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, Q
                               QFormLayout, QTabWidget, QScrollArea, QFrame, QHeaderView, QTextEdit)
 from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QFont, QIntValidator
-from ..dialogs.bookauthors import BookAuthorsDialog
-from ..dialogs.authors import AuthorsDialog
-from ..dialogs.readers import ReadersDialog
-from ..dialogs.books import BooksDialog
-from ..dialogs.issues import IssuesDialog
-from BD_biblioteka_02.core.logger import Logger
-from ..styles import (get_light_theme_style, get_dark_theme_style, get_log_display_style, get_title_style)
+from ui.dialogs.bookauthors import BookAuthorsDialog
+from ui.dialogs.authors import AuthorsDialog
+from ui.dialogs.readers import ReadersDialog
+from ui.dialogs.books import BooksDialog
+from ui.dialogs.issues import IssuesDialog
+from core.logger import Logger
+from ui.styles import (get_light_theme_style, get_dark_theme_style, get_log_display_style, get_title_style)
+
+from ui.dialogs.string_operations import StringOperationsDialog
 
 class MainWindow(QMainWindow):
     """
@@ -150,6 +152,11 @@ class MainWindow(QMainWindow):
         self.books_authors_btn.clicked.connect(self.show_books_authors)
         buttons_layout.addWidget(self.books_authors_btn)
 
+        # Добавляем новую кнопку для строковых операций
+        self.string_ops_btn = QPushButton("Строковые операции")
+        self.string_ops_btn.clicked.connect(self.show_string_operations)
+        buttons_layout.addWidget(self.string_ops_btn)
+
         main_layout.addLayout(buttons_layout)
 
     def load_logs(self):
@@ -268,3 +275,8 @@ class MainWindow(QMainWindow):
         """Обработка события закрытия окна."""
         self.controller.disconnect()
         event.accept()
+
+    def show_string_operations(self):
+        """Открытие диалога строковых операций"""
+        dialog = StringOperationsDialog(self.controller, self)
+        dialog.exec()

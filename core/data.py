@@ -1,7 +1,7 @@
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import DictCursor
-from BD_biblioteka_02.core.logger import Logger
+from core.logger import Logger
 
 
 class DatabaseManager:
@@ -750,3 +750,119 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"Ошибка удаления автора: {str(e)}")
             return False, str(e)
+
+    def execute_string_operation(self, operation, text, *args):
+        """
+        Выполнение строковой операции
+        :param operation: Тип операции (UPPER, LOWER, etc.)
+        :param text: Исходный текст
+        :param args: Дополнительные аргументы
+        :return: Результат операции
+        """
+        try:
+            if operation == "UPPER":
+                sql = f"SELECT UPPER(%s)"
+                params = (text,)
+            elif operation == "LOWER":
+                sql = f"SELECT LOWER(%s)"
+                params = (text,)
+            elif operation == "SUBSTRING":
+                start, length = args
+                sql = f"SELECT SUBSTRING(%s FROM %s FOR %s)"
+                params = (text, start, length)
+            elif operation == "TRIM":
+                sql = f"SELECT TRIM(%s)"
+                params = (text,)
+            elif operation == "LPAD":
+                length, fill_char = args
+                sql = f"SELECT LPAD(%s, %s, %s)"
+                params = (text, length, fill_char)
+            elif operation == "RPAD":
+                length, fill_char = args
+                sql = f"SELECT RPAD(%s, %s, %s)"
+                params = (text, length, fill_char)
+            elif operation == "CONCAT":
+                second_text = args[0]
+                sql = f"SELECT %s || %s"
+                params = (text, second_text)
+
+            self.cursor.execute(sql, params)
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            self.logger.error(f"Ошибка выполнения строковой операции: {str(e)}")
+            raise
+
+    def search_books(self, column, search_type, search_text):
+        """
+        Поиск книг с использованием различных операторов
+        :param column: Имя столбца для поиска
+        :param search_type: Тип поиска (LIKE, ~, ~*, !~, !~*)
+        :param search_text: Текст для поиска
+        :return: Список найденных книг
+        """
+        try:
+            if search_type == "LIKE":
+                condition = f"{column} LIKE %s"
+                params = (search_text,)
+            elif search_type == "LIKE %":
+                condition = f"{column} LIKE %s"
+                params = (f"%{search_text}%",)
+            elif search_type == "~":
+                condition = f"{column} ~ %s"
+                params = (search_text,)
+            elif search_type == "~*":
+                condition = f"{column} ~* %s"
+                params = (search_text,)
+            elif search_type == "!~":
+                condition = f"{column} !~ %s"
+                params = (search_text,)
+            elif search_type == "!~*":
+                condition = f"{column} !~* %s"
+                params = (search_text,)
+            else:
+                raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
+
+            sql = f"SELECT * FROM books WHERE {condition}"
+            self.cursor.execute(sql, params)
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.logger.error(f"Ошибка поиска книг: {str(e)}")
+            return []
+
+    def search_authors(self, column, search_type, search_text):
+        """
+        Поиск авторов с использованием различных операторов
+        :param column: Имя столбца для поиска
+        :param search_type: Тип поиска (LIKE, ~, ~*, !~, !~*)
+        :param search_text: Текст для поиска
+        :return: Список найденных авторов
+        """
+        try:
+            if search_type == "LIKE":
+                condition = f"{column} LIKE %s"
+                params = (search_text,)
+            elif search_type == "LIKE %":
+                condition = f"{column} LIKE %s"
+                params = (f"%{search_text}%",)
+            elif search_type == "~":
+                condition = f"{column} ~ %s"
+                params = (search_text,)
+            elif search_type == "~*":
+                condition = f"{column} ~* %s"
+                params = (search_text,)
+            elif search_type == "!~":
+                condition = f"{column} !~ %s"
+                params = (search_text,)
+            elif search_type == "!~*":
+                condition = f"{column} !~* %s"
+                params = (search_text,)
+            else:
+                raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
+
+            sql = f"SELECT * FROM authors WHERE {condition}"
+            self.cursor.execute(sql, params)
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.logger.error(f"Ошибка поиска авторов: {str(e)}")
+            return []

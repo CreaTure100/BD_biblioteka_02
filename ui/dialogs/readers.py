@@ -4,8 +4,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, Q
                               QFormLayout, QTabWidget, QScrollArea, QFrame, QHeaderView, QTextEdit)
 from PySide6.QtCore import Qt, Signal, QTimer, QDate
 from PySide6.QtGui import QFont, QIntValidator
-from ..styles import get_form_label_style
-from ...core.additional_classes import NumericTableItem, ValidatedLineEdit
+from ui.styles import get_form_label_style
+from core.additional_classes import NumericTableItem, ValidatedLineEdit
 
 class ReadersDialog(QDialog):
     """

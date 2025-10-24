@@ -5,10 +5,10 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, Q
 from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QFont, QIntValidator
 
-from BD_biblioteka_02.core.data import DatabaseManager
-from BD_biblioteka_02.core.additional_classes import TextValidator
-from BD_biblioteka_02.core.logger import Logger
-from ..styles import get_message_box_style, get_form_label_style, get_combobox_style, get_button_style
+from core.data import DatabaseManager
+from core.additional_classes import TextValidator
+from core.logger import Logger
+from ui.styles import get_message_box_style, get_form_label_style, get_combobox_style, get_button_style
 
 
 class ValidatedLoginLineEdit(QLineEdit):

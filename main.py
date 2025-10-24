@@ -1,12 +1,12 @@
 """
 Главный модуль приложения "Библиотека".
-Точка входа в программу.
+Точка входа в программу.зн 
 """
 import sys
 from PySide6.QtWidgets import QApplication
-from BD_biblioteka_02.ui.windows.MainWindow import MainWindow
-from BD_biblioteka_02.ui.dialogs.login import LoginDialog
-from BD_biblioteka_02.core.logger import Logger
+from ui.windows.MainWindow import MainWindow
+from ui.dialogs.login import LoginDialog
+from core.logger import Logger
 
 if __name__ == "__main__":
     # Инициализация логгера
