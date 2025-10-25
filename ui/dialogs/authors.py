@@ -158,11 +158,24 @@ class AuthorsDialog(QDialog):
             return
 
         try:
-            # Поиск по фамилии (last_name)
-            authors = self.controller.search_authors("last_name", search_type, search_text)
+            # ИСПРАВЛЕННЫЙ ПОИСК - теперь ищет по всем полям
+            authors = self.controller.search_authors_comprehensive(
+                search_type, 
+                search_text, 
+                search_in_all_fields=True  # ← ВКЛЮЧАЕМ ПОИСК ПО ВСЕМ ПОЛЯМ
+            )
         
             # Обновляем таблицу с результатами
             self.update_authors_table(authors)
+            
+            # Показываем сообщение о количестве найденных результатов
+            if authors:
+                QMessageBox.information(self, "Поиск завершен", 
+                                      f"Найдено авторов: {len(authors)}")
+            else:
+                QMessageBox.information(self, "Поиск завершен", 
+                                      "Авторы не найдены")
+                
         except Exception as e:
             QMessageBox.warning(self, "Ошибка", f"Ошибка при поиске: {str(e)}")
 
