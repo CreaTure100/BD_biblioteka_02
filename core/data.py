@@ -753,37 +753,56 @@ class DatabaseManager:
 
     def execute_string_operation(self, operation, text, *args):
         """
-        Выполнение строковой операции
-        :param operation: Тип операции (UPPER, LOWER, etc.)
-        :param text: Исходный текст
-        :param args: Дополнительные аргументы
-        :return: Результат операции
+        Выполнение строковой операции с защитой от SQL-инъекций
         """
         try:
+            # Словарь допустимых операций и соответствующих SQL-функций
+            operations = {
+                "UPPER": "UPPER",
+                "LOWER": "LOWER", 
+                "TRIM": "TRIM",
+                "SUBSTRING": "SUBSTRING",
+                "LPAD": "LPAD",
+                "RPAD": "RPAD",
+                "CONCAT": "CONCAT"
+            }
+            
+            if operation not in operations:
+                raise ValueError(f"Неподдерживаемая операция: {operation}")
+            
+            # Безопасное построение запроса с параметрами
             if operation == "UPPER":
-                sql = f"SELECT UPPER(%s)"
+                sql = "SELECT UPPER(%s)"
                 params = (text,)
             elif operation == "LOWER":
-                sql = f"SELECT LOWER(%s)"
+                sql = "SELECT LOWER(%s)"
                 params = (text,)
             elif operation == "SUBSTRING":
+                if len(args) < 2:
+                    raise ValueError("Для SUBSTRING требуются start и length аргументы")
                 start, length = args
-                sql = f"SELECT SUBSTRING(%s FROM %s FOR %s)"
+                sql = "SELECT SUBSTRING(%s FROM %s FOR %s)"
                 params = (text, start, length)
             elif operation == "TRIM":
-                sql = f"SELECT TRIM(%s)"
+                sql = "SELECT TRIM(%s)"
                 params = (text,)
             elif operation == "LPAD":
+                if len(args) < 2:
+                    raise ValueError("Для LPAD требуются length и fill_char аргументы")
                 length, fill_char = args
-                sql = f"SELECT LPAD(%s, %s, %s)"
+                sql = "SELECT LPAD(%s, %s, %s)"
                 params = (text, length, fill_char)
             elif operation == "RPAD":
+                if len(args) < 2:
+                    raise ValueError("Для RPAD требуются length и fill_char аргументы")
                 length, fill_char = args
-                sql = f"SELECT RPAD(%s, %s, %s)"
+                sql = "SELECT RPAD(%s, %s, %s)"
                 params = (text, length, fill_char)
             elif operation == "CONCAT":
+                if len(args) < 1:
+                    raise ValueError("Для CONCAT требуется второй текст")
                 second_text = args[0]
-                sql = f"SELECT %s || %s"
+                sql = "SELECT CONCAT(%s, %s)"
                 params = (text, second_text)
 
             self.cursor.execute(sql, params)
@@ -796,34 +815,35 @@ class DatabaseManager:
     def search_books(self, column, search_type, search_text):
         """
         Поиск книг с использованием различных операторов
-        :param column: Имя столбца для поиска
-        :param search_type: Тип поиска (LIKE, ~, ~*, !~, !~*)
-        :param search_text: Текст для поиска
-        :return: Список найденных книг
         """
         try:
-            if search_type == "LIKE":
-                condition = f"{column} LIKE %s"
-                params = (search_text,)
-            elif search_type == "LIKE %":
-                condition = f"{column} LIKE %s"
-                params = (f"%{search_text}%",)
-            elif search_type == "~":
-                condition = f"{column} ~ %s"
-                params = (search_text,)
-            elif search_type == "~*":
-                condition = f"{column} ~* %s"
-                params = (search_text,)
-            elif search_type == "!~":
-                condition = f"{column} !~ %s"
-                params = (search_text,)
-            elif search_type == "!~*":
-                condition = f"{column} !~* %s"
-                params = (search_text,)
-            else:
+            # Допустимые колонки для поиска
+            valid_columns = ['title', 'genre', 'isbn']
+            if column not in valid_columns:
+                raise ValueError(f"Недопустимая колонка для поиска: {column}")
+
+            # Безопасное построение условия
+            conditions = {
+                "LIKE": f"{column} LIKE %s",
+                "LIKE %": f"{column} LIKE %s", 
+                "~": f"{column} ~ %s",
+                "~*": f"{column} ~* %s",
+                "!~": f"{column} !~ %s",
+                "!~*": f"{column} !~* %s"
+            }
+            
+            if search_type not in conditions:
                 raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
 
-            sql = f"SELECT * FROM books WHERE {condition}"
+            condition = conditions[search_type]
+            
+            # Обработка параметров
+            if search_type == "LIKE %":
+                params = (f"%{search_text}%",)
+            else:
+                params = (search_text,)
+
+            sql = f"SELECT * FROM books WHERE {condition} ORDER BY title"
             self.cursor.execute(sql, params)
             return self.cursor.fetchall()
         except Exception as e:
@@ -833,36 +853,136 @@ class DatabaseManager:
     def search_authors(self, column, search_type, search_text):
         """
         Поиск авторов с использованием различных операторов
-        :param column: Имя столбца для поиска
-        :param search_type: Тип поиска (LIKE, ~, ~*, !~, !~*)
-        :param search_text: Текст для поиска
-        :return: Список найденных авторов
+        Теперь поддерживает поиск по году рождения
         """
         try:
-            if search_type == "LIKE":
-                condition = f"{column} LIKE %s"
-                params = (search_text,)
-            elif search_type == "LIKE %":
-                condition = f"{column} LIKE %s"
-                params = (f"%{search_text}%",)
-            elif search_type == "~":
-                condition = f"{column} ~ %s"
-                params = (search_text,)
-            elif search_type == "~*":
-                condition = f"{column} ~* %s"
-                params = (search_text,)
-            elif search_type == "!~":
-                condition = f"{column} !~ %s"
-                params = (search_text,)
-            elif search_type == "!~*":
-                condition = f"{column} !~* %s"
-                params = (search_text,)
-            else:
-                raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
+            # Допустимые колонки для поиска (включая все поля авторов)
+            valid_columns = ['last_name', 'first_name', 'patronymic', 'country', 'birth_year']
+            if column not in valid_columns:
+                raise ValueError(f"Недопустимая колонка для поиска: {column}")
 
-            sql = f"SELECT * FROM authors WHERE {condition}"
+            # Для числового поля birth_year используем другой подход
+            if column == 'birth_year':
+                if search_type in ["LIKE", "LIKE %"]:
+                    # Для года рождения преобразуем в текст для поиска
+                    condition = "CAST(birth_year AS TEXT) LIKE %s"
+                    if search_type == "LIKE %":
+                        params = (f"%{search_text}%",)
+                    else:
+                        params = (search_text,)
+                elif search_type in ["~", "~*", "!~", "!~*"]:
+                    # Регулярные выражения для текстового представления года
+                    condition = f"CAST(birth_year AS TEXT) {self._get_regex_operator(search_type)} %s"
+                    params = (search_text,)
+                else:
+                    # По умолчанию точное совпадение для года
+                    if search_text.isdigit():
+                        condition = "birth_year = %s"
+                        params = (int(search_text),)
+                    else:
+                        # Если введен не число, ищем в текстовом представлении
+                        condition = "CAST(birth_year AS TEXT) LIKE %s"
+                        params = (f"%{search_text}%",)
+            else:
+                # Текстовые поля
+                conditions = {
+                    "LIKE": f"{column} LIKE %s",
+                    "LIKE %": f"{column} LIKE %s",
+                    "~": f"{column} ~ %s", 
+                    "~*": f"{column} ~* %s",
+                    "!~": f"{column} !~ %s",
+                    "!~*": f"{column} !~* %s"
+                }
+                
+                if search_type not in conditions:
+                    raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
+
+                condition = conditions[search_type]
+                
+                # Обработка параметров
+                if search_type == "LIKE %":
+                    params = (f"%{search_text}%",)
+                else:
+                    params = (search_text,)
+
+            sql = f"SELECT * FROM authors WHERE {condition} ORDER BY last_name, first_name"
             self.cursor.execute(sql, params)
             return self.cursor.fetchall()
         except Exception as e:
             self.logger.error(f"Ошибка поиска авторов: {str(e)}")
+            return []
+
+    def search_authors_comprehensive(self, search_type, search_text, search_in_all_fields=False):
+        """
+        Расширенный поиск авторов по всем полям или конкретным полям
+        Включая поиск по году рождения
+        """
+        try:
+            if search_in_all_fields:
+                # Поиск по всем полям включая год рождения
+                if search_type == "LIKE %":
+                    # Для текстовых полей используем LIKE, для года рождения - точное сравнение
+                    condition = """
+                        (last_name ILIKE %s OR first_name ILIKE %s OR 
+                        patronymic ILIKE %s OR country ILIKE %s OR
+                        CAST(birth_year AS TEXT) LIKE %s)
+                    """
+                    params = (f"%{search_text}%", f"%{search_text}%", f"%{search_text}%", 
+                            f"%{search_text}%", f"%{search_text}%")
+                elif search_type == "~":
+                    condition = """
+                        (last_name ~ %s OR first_name ~ %s OR 
+                        patronymic ~ %s OR country ~ %s OR
+                        CAST(birth_year AS TEXT) ~ %s)
+                    """
+                    params = (search_text, search_text, search_text, search_text, search_text)
+                elif search_type == "~*":
+                    condition = """
+                        (last_name ~* %s OR first_name ~* %s OR 
+                        patronymic ~* %s OR country ~* %s OR
+                        CAST(birth_year AS TEXT) ~* %s)
+                    """
+                    params = (search_text, search_text, search_text, search_text, search_text)
+                elif search_type == "!~":
+                    condition = """
+                        (last_name !~ %s AND first_name !~ %s AND 
+                        patronymic !~ %s AND country !~ %s AND
+                        CAST(birth_year AS TEXT) !~ %s)
+                    """
+                    params = (search_text, search_text, search_text, search_text, search_text)
+                elif search_type == "!~*":
+                    condition = """
+                        (last_name !~* %s AND first_name !~* %s AND 
+                        patronymic !~* %s AND country !~* %s AND
+                        CAST(birth_year AS TEXT) !~* %s)
+                    """
+                    params = (search_text, search_text, search_text, search_text, search_text)
+                elif search_type == "LIKE":
+                    # Обычный LIKE без % - добавляем % вручную для всех полей
+                    condition = """
+                        (last_name ILIKE %s OR first_name ILIKE %s OR 
+                        patronymic ILIKE %s OR country ILIKE %s OR
+                        CAST(birth_year AS TEXT) LIKE %s)
+                    """
+                    search_pattern = f"%{search_text}%"
+                    params = (search_pattern, search_pattern, search_pattern, 
+                            search_pattern, search_pattern)
+                else:
+                    # Для других типов поиска используем ILIKE по всем полям
+                    condition = """
+                        (last_name ILIKE %s OR first_name ILIKE %s OR 
+                        patronymic ILIKE %s OR country ILIKE %s OR
+                        CAST(birth_year AS TEXT) LIKE %s)
+                    """
+                    params = (f"%{search_text}%", f"%{search_text}%", f"%{search_text}%", 
+                            f"%{search_text}%", f"%{search_text}%")
+            else:
+                # Поиск только по фамилии (как в оригинале)
+                return self.search_authors('last_name', search_type, search_text)
+
+            sql = f"SELECT * FROM authors WHERE {condition} ORDER BY last_name, first_name"
+            self.cursor.execute(sql, params)
+            return self.cursor.fetchall()
+        except Exception as e:
+            self.logger.error(f"Ошибка расширенного поиска авторов: {str(e)}")
             return []
