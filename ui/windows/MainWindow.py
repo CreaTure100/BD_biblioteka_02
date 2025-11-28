@@ -203,9 +203,10 @@ class MainWindow(QMainWindow):
 
     def show_table_viewer(self):
         """Открывает динамический обозреватель таблиц."""
-        from ui.dialogs.table_viewer import TableViewerDialog
-        dialog = TableViewerDialog(self.controller, self)
+        from ui.dialogs.searchable_table_viewer import SearchableTableViewerDialog
+        dialog = SearchableTableViewerDialog(self.controller, self)
         dialog.exec()
+
     def load_logs(self):
         """Загрузка содержимого лог-файла в окно логов."""
         try:
