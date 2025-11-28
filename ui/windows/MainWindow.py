@@ -18,6 +18,7 @@ from ui.dialogs.searchable_books import SearchableBooksDialog
 from ui.dialogs.searchable_readers import SearchableReadersDialog
 from ui.dialogs.searchable_issues import SearchableIssuesDialog
 from ui.dialogs.searchable_bookauthors import SearchableBookAuthorsDialog
+from ui.dialogs.case_builder import CaseBuilderDialog
 
 class MainWindow(QMainWindow):
     """
@@ -199,12 +200,21 @@ class MainWindow(QMainWindow):
         self.request_builder_btn.clicked.connect(self.show_request_builder)
         buttons_layout.addWidget(self.request_builder_btn)
 
+        self.case_builder_btn = QPushButton("CASE")
+        self.case_builder_btn.clicked.connect(self.show_case_builder)
+        buttons_layout.addWidget(self.case_builder_btn)
+
         main_layout.addLayout(buttons_layout)
 
     def show_table_viewer(self):
         """Открывает динамический обозреватель таблиц."""
         from ui.dialogs.searchable_table_viewer import SearchableTableViewerDialog
         dialog = SearchableTableViewerDialog(self.controller, self)
+        dialog.exec()
+    
+    def show_case_builder(self):
+        """Открытие диалога конструктора CASE выражений."""
+        dialog = CaseBuilderDialog(self.controller, self)
         dialog.exec()
 
     def load_logs(self):
