@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDateTime
 
 from core.alter_operations import AlterTableManager
+from core.custom_types import CustomTypesManager  # Добавляем импорт
 
 
 class AlterTableDialog(QDialog):
@@ -37,6 +38,7 @@ class AlterTableDialog(QDialog):
         self.setup_columns_tab()
         self.setup_rename_tab()
         self.setup_constraints_tab()
+        self.setup_custom_types_tab()  # Добавляем новую вкладку
 
         layout.addWidget(self.tabs)
 
@@ -59,6 +61,58 @@ class AlterTableDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+    def setup_custom_types_tab(self):
+        """Вкладка для работы с пользовательскими типами данных."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Кнопка для открытия диалога пользовательских типов
+        self.custom_types_btn = QPushButton("Управление пользовательскими типами")
+        self.custom_types_btn.clicked.connect(self.open_custom_types_dialog)
+        layout.addWidget(self.custom_types_btn)
+
+        # Информация о доступных пользовательских типах
+        layout.addWidget(QLabel("Существующие пользовательские типы:"))
+        self.custom_types_table = QTableWidget()
+        self.custom_types_table.setColumnCount(3)
+        self.custom_types_table.setHorizontalHeaderLabels(["Имя типа", "Тип", "Детали"])
+        self.custom_types_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.custom_types_table)
+
+        self.tabs.addTab(widget, "Пользовательские типы")
+
+        # Загружаем информацию о типах
+        self.load_custom_types()
+
+    def open_custom_types_dialog(self):
+        """Открыть диалог управления пользовательскими типами."""
+        from ui.dialogs.custom_types_dialog import CustomTypesDialog
+        dialog = CustomTypesDialog(self.db_connection, self)
+        dialog.exec()
+        # Обновляем информацию после закрытия диалога
+        self.load_custom_types()
+        self.load_tables()  # Обновляем информацию о таблицах, т.к. могли измениться типы
+
+    def load_custom_types(self):
+        """Загрузка информации о пользовательских типах."""
+        types_manager = CustomTypesManager(self.db_connection)
+        types = types_manager.get_custom_types()
+
+        self.custom_types_table.setRowCount(len(types))
+
+        for i, type_info in enumerate(types):
+            self.custom_types_table.setItem(i, 0, QTableWidgetItem(type_info['name']))
+            self.custom_types_table.setItem(i, 1, QTableWidgetItem(type_info['kind']))
+
+            details = ""
+            if type_info['kind'] == 'enum' and 'values' in type_info:
+                details = f"Значения: {', '.join(type_info['values'])}"
+            elif type_info['kind'] == 'composite' and 'attributes' in type_info:
+                attrs = [f"{attr['attribute_name']} {attr['attribute_type']}"
+                         for attr in type_info['attributes']]
+                details = f"Атрибуты: {', '.join(attrs)}"
+
+            self.custom_types_table.setItem(i, 2, QTableWidgetItem(details))
     def connect_signals(self):
         """Подключение сигналов для обновления комбобоксов."""
         self.drop_table_combo.currentTextChanged.connect(
@@ -106,11 +160,17 @@ class AlterTableDialog(QDialog):
 
         add_layout.addWidget(QLabel("Тип данных:"), 2, 0)
         self.data_type_combo = QComboBox()
-        self.data_type_combo.addItems([
+        # Базовые типы данных
+        base_types = [
             "VARCHAR(255)", "TEXT", "INTEGER", "BIGINT", "SMALLINT",
             "DECIMAL(10,2)", "NUMERIC", "BOOLEAN", "DATE", "TIMESTAMP",
             "SERIAL", "BIGSERIAL"
-        ])
+        ]
+        self.data_type_combo.addItems(base_types)
+
+        # Загружаем пользовательские типы
+        self.load_custom_types_to_combo()
+
         add_layout.addWidget(self.data_type_combo, 2, 1)
 
         self.nullable_check = QCheckBox("Разрешить NULL")
@@ -146,6 +206,19 @@ class AlterTableDialog(QDialog):
         layout.addWidget(drop_group, 1, 0)
 
         self.tabs.addTab(widget, "Столбцы")
+
+    def load_custom_types_to_combo(self):
+        """Загрузка пользовательских типов в комбобокс типов данных."""
+        types_manager = CustomTypesManager(self.db_connection)
+        custom_types = types_manager.get_custom_types()
+
+        # Добавляем разделитель
+        if custom_types:
+            self.data_type_combo.insertSeparator(self.data_type_combo.count())
+
+            # Добавляем пользовательские типы
+            for type_info in custom_types:
+                self.data_type_combo.addItem(type_info['name'])
 
     def setup_rename_tab(self):
         """Вкладка для переименования."""
