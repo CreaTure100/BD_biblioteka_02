@@ -450,6 +450,156 @@ def get_log_display_style(theme="light"):
             background-color: {LIGHT_THEME_COLORS["log_bg"]}; 
             color: {LIGHT_THEME_COLORS["log_text"]};
         """
+def get_groupbox_style(theme="light"):
+    """
+    Возвращает стиль для GroupBox в зависимости от выбранной темы.
+
+    Args:
+        theme (str): "light" или "dark" - выбранная тема
+
+    Returns:
+        str: CSS стиль для GroupBox
+    """
+    if theme == "dark":
+        return f"""
+            QGroupBox {{
+                color: {DARK_THEME_COLORS["text"]};
+                border: 1px solid {DARK_THEME_COLORS["border"]};
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: {DARK_THEME_COLORS["text"]};
+            }}
+        """
+    else:
+        return f"""
+            QGroupBox {{
+                color: {LIGHT_THEME_COLORS["text"]};
+                border: 1px solid {LIGHT_THEME_COLORS["border"]};
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: {LIGHT_THEME_COLORS["text"]};
+            }}
+        """
+
+def get_radiobutton_style(theme="light"):
+    """
+    Возвращает стиль для RadioButton в зависимости от выбранной темы.
+
+    Args:
+        theme (str): "light" или "dark" - выбранная тема
+
+    Returns:
+        str: CSS стиль для RadioButton
+    """
+    if theme == "dark":
+        return f"""
+            QRadioButton {{
+                color: {DARK_THEME_COLORS["text"]};
+                spacing: 5px;
+            }}
+            QRadioButton::indicator {{
+                width: 13px;
+                height: 13px;
+                border-radius: 7px;
+                border: 2px solid {DARK_THEME_COLORS["border"]};
+                background-color: {DARK_THEME_COLORS["secondary"]};
+            }}
+            QRadioButton::indicator:checked {{
+                background-color: {DARK_THEME_COLORS["success"]};
+                border: 2px solid {DARK_THEME_COLORS["success"]};
+            }}
+            QRadioButton::indicator:hover {{
+                border: 2px solid {DARK_THEME_COLORS["primary_hover"]};
+            }}
+        """
+    else:
+        return f"""
+            QRadioButton {{
+                color: {LIGHT_THEME_COLORS["text"]};
+                spacing: 5px;
+            }}
+            QRadioButton::indicator {{
+                width: 13px;
+                height: 13px;
+                border-radius: 7px;
+                border: 2px solid {LIGHT_THEME_COLORS["border"]};
+                background-color: white;
+            }}
+            QRadioButton::indicator:checked {{
+                background-color: {LIGHT_THEME_COLORS["primary"]};
+                border: 2px solid {LIGHT_THEME_COLORS["primary"]};
+            }}
+            QRadioButton::indicator:hover {{
+                border: 2px solid {LIGHT_THEME_COLORS["primary_hover"]};
+            }}
+        """
+
+def get_checkbox_style(theme="light"):
+    """
+    Возвращает стиль для CheckBox в зависимости от выбранной темы.
+
+    Args:
+        theme (str): "light" или "dark" - выбранная тема
+
+    Returns:
+        str: CSS стиль для CheckBox
+    """
+    if theme == "dark":
+        return f"""
+            QCheckBox {{
+                color: {DARK_THEME_COLORS["text"]};
+                spacing: 5px;
+            }}
+            QCheckBox::indicator {{
+                width: 13px;
+                height: 13px;
+                border: 2px solid {DARK_THEME_COLORS["border"]};
+                background-color: {DARK_THEME_COLORS["secondary"]};
+                border-radius: 3px;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {DARK_THEME_COLORS["success"]};
+                border: 2px solid {DARK_THEME_COLORS["success"]};
+            }}
+            QCheckBox::indicator:hover {{
+                border: 2px solid {DARK_THEME_COLORS["primary_hover"]};
+            }}
+        """
+    else:
+        return f"""
+            QCheckBox {{
+                color: {LIGHT_THEME_COLORS["text"]};
+                spacing: 5px;
+            }}
+            QCheckBox::indicator {{
+                width: 13px;
+                height: 13px;
+                border: 2px solid {LIGHT_THEME_COLORS["border"]};
+                background-color: white;
+                border-radius: 3px;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {LIGHT_THEME_COLORS["primary"]};
+                border: 2px solid {LIGHT_THEME_COLORS["primary"]};
+            }}
+            QCheckBox::indicator:hover {{
+                border: 2px solid {LIGHT_THEME_COLORS["primary_hover"]};
+            }}
+        """
 
 # ПОЛНЫЕ НАБОРЫ СТИЛЕЙ ДЛЯ ПРИЛОЖЕНИЯ
 
@@ -472,6 +622,9 @@ def get_light_theme_style():
         {get_tab_style("light")}
         {get_combobox_style("light")}
         {get_input_fields_style("light")}
+        {get_groupbox_style("light")}
+        {get_radiobutton_style("light")}
+        {get_checkbox_style("light")}
     """
 
 def get_dark_theme_style():
@@ -494,9 +647,10 @@ def get_dark_theme_style():
         {get_tab_style("dark")}
         {get_combobox_style("dark")}
         {get_input_fields_style("dark")}
+        {get_groupbox_style("dark")}
+        {get_radiobutton_style("dark")}
+        {get_checkbox_style("dark")}
     """
-
-# СПЕЦИАЛЬНЫЕ СТИЛИ ДЛЯ КОМПОНЕНТОВ
 
 def get_title_style(theme="light"):
     """
