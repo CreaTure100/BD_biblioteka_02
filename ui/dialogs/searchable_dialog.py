@@ -15,7 +15,9 @@ class SearchableDialogMixin:
         
         # Настраиваем комбобокс для выбора типа поиска
         self.search_type_combo.addItems([
-            "LIKE", 
+            "LIKE",
+            "SIMILAR TO",
+            "NOT SIMILAR TO",  
             "POSIX regex (~)",
             "POSIX regex case-insensitive (~*)",
             "POSIX regex NOT (!~)",
@@ -75,6 +77,8 @@ class SearchableDialogMixin:
         # Преобразуем тип поиска в оператор
         operator_map = {
             "LIKE": lambda text, search: search.lower() in text.lower(),
+            "SIMILAR TO": lambda text, search: self.similar_to_match(text, search),
+            "NOT SIMILAR TO": lambda text, search: not self.similar_to_match(text, search),
             "POSIX regex (~)": lambda text, search: self.regex_match(text, search, False, False),
             "POSIX regex case-insensitive (~*)": lambda text, search: self.regex_match(text, search, True, False),
             "POSIX regex NOT (!~)": lambda text, search: not self.regex_match(text, search, False, False),
@@ -101,6 +105,14 @@ class SearchableDialogMixin:
     def get_table_widget(self):
         """Метод должен быть переопределен в конкретных классах"""
         raise NotImplementedError
+    def similar_to_match(self, text, pattern):
+        """Проверка соответствия текста шаблону SIMILAR TO"""
+        import re
+        regex_pattern = pattern.replace('%', '.*').replace('_', '.')
+        try:
+            return bool(re. search(f'^{regex_pattern}$', text))
+        except re.error:
+            return False
 
     def show_string_operations(self):
         """Открывает диалог строковых операций"""
