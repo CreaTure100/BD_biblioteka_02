@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QMessageBox
 class CustomTypesManager:
     """
     Менеджер для работы с пользовательскими типами данных (ENUM и составные типы).
-    Полностью совместим с существующей архитектурой приложения.
+    С поддержкой полноценного редактирования через миграцию.
     """
 
     def __init__(self, db_connection):
@@ -96,7 +96,7 @@ class CustomTypesManager:
         if not values:
             return False, "ENUM должен содержать хотя бы одно значение"
 
-        # Экранируем значения - исправленная строка
+        # Экранируем значения
         escaped_values = [f"""'{value.replace("'", "''")}'""" for value in values]
         values_sql = ", ".join(escaped_values)
 
@@ -115,32 +115,135 @@ class CustomTypesManager:
         sql = f"CREATE TYPE {type_name} AS ({attributes_sql})"
         return self.execute_safe(sql)
 
+    def update_enum_type(self, old_type_name: str, new_type_name: str, values: List[str]) -> Tuple[bool, str]:
+        """Обновить ENUM тип через создание нового и миграцию данных."""
+        try:
+            # Создаем новый тип
+            success, message = self.create_enum_type(new_type_name, values)
+            if not success:
+                return False, message
+
+            # Мигрируем данные из старого типа в новый
+            migration_success = self.migrate_enum_data(old_type_name, new_type_name)
+            if not migration_success:
+                # Если миграция не удалась, удаляем новый тип
+                self.drop_type(new_type_name)
+                return False, "Не удалось мигрировать данные"
+
+            # Удаляем старый тип
+            self.drop_type(old_type_name)
+
+            return True, f"ENUM тип успешно обновлен на '{new_type_name}'"
+
+        except Exception as e:
+            return False, f"Ошибка при обновлении ENUM типа: {str(e)}"
+
+    def update_composite_type(self, old_type_name: str, new_type_name: str,
+                              attributes: List[Dict]) -> Tuple[bool, str]:
+        """Обновить составной тип через создание нового и миграцию данных."""
+        try:
+            # Создаем новый тип
+            success, message = self.create_composite_type(new_type_name, attributes)
+            if not success:
+                return False, message
+
+            # Мигрируем данные из старого типа в новый
+            migration_success = self.migrate_composite_data(old_type_name, new_type_name)
+            if not migration_success:
+                # Если миграция не удалась, удаляем новый тип
+                self.drop_type(new_type_name)
+                return False, "Не удалось мигрировать данные"
+
+            # Удаляем старый тип
+            self.drop_type(old_type_name)
+
+            return True, f"Составной тип успешно обновлен на '{new_type_name}'"
+
+        except Exception as e:
+            return False, f"Ошибка при обновлении составного типа: {str(e)}"
+
+    def migrate_enum_data(self, old_type_name: str, new_type_name: str) -> bool:
+        """Мигрировать данные для ENUM типа."""
+        try:
+            with self.conn.cursor() as cursor:
+                # Получаем таблицы, использующие старый тип
+                cursor.execute("""
+                    SELECT table_name, column_name 
+                    FROM information_schema.columns 
+                    WHERE udt_name = %s
+                """, (old_type_name,))
+                usage_info = cursor.fetchall()
+
+                # Для каждой таблицы обновляем тип столбца
+                for table_name, column_name in usage_info:
+                    # Создаем временный столбец с новым типом
+                    cursor.execute(f"""
+                        ALTER TABLE {table_name} 
+                        ADD COLUMN {column_name}_new {new_type_name}
+                    """)
+
+                    # Копируем данные (простое преобразование)
+                    cursor.execute(f"""
+                        UPDATE {table_name} 
+                        SET {column_name}_new = {column_name}::text::{new_type_name}
+                        WHERE {column_name} IS NOT NULL
+                    """)
+
+                    # Удаляем старый столбец и переименовываем новый
+                    cursor.execute(f"""
+                        ALTER TABLE {table_name} 
+                        DROP COLUMN {column_name}
+                    """)
+
+                    cursor.execute(f"""
+                        ALTER TABLE {table_name} 
+                        RENAME COLUMN {column_name}_new TO {column_name}
+                    """)
+
+                self.conn.commit()
+                return True
+
+        except Exception as e:
+            self.conn.rollback()
+            print(f"Ошибка миграции ENUM данных: {e}")
+            return False
+
+    def migrate_composite_data(self, old_type_name: str, new_type_name: str) -> bool:
+        """Мигрировать данные для составного типа."""
+        try:
+            with self.conn.cursor() as cursor:
+                # Получаем таблицы, использующие старый тип
+                cursor.execute("""
+                    SELECT table_name, column_name 
+                    FROM information_schema.columns 
+                    WHERE udt_name = %s
+                """, (old_type_name,))
+                usage_info = cursor.fetchall()
+
+                # Для каждой таблицы обновляем тип столбца
+                for table_name, column_name in usage_info:
+                    # Просто изменяем тип (PostgreSQL попытается привести автоматически)
+                    cursor.execute(f"""
+                        ALTER TABLE {table_name} 
+                        ALTER COLUMN {column_name} TYPE {new_type_name} 
+                        USING {column_name}::text::{new_type_name}
+                    """)
+
+                self.conn.commit()
+                return True
+
+        except Exception as e:
+            self.conn.rollback()
+            print(f"Ошибка миграции составных данных: {e}")
+            return False
+
     def add_enum_value(self, type_name: str, value: str, after: str = None) -> Tuple[bool, str]:
         """Добавить значение в ENUM тип."""
-        # В PostgreSQL нельзя напрямую добавлять значения в ENUM, нужно создать новый тип
-        # Это упрощенная реализация - в продакшене нужно быть осторожнее
         sql = f"ALTER TYPE {type_name} ADD VALUE '{value}'"
         if after:
             sql += f" AFTER '{after}'"
 
         return self.execute_safe(sql)
-
-    def drop_enum_value(self, type_name: str, value: str) -> Tuple[bool, str]:
-        """Удалить значение из ENUM типа."""
-        # В PostgreSQL нельзя напрямую удалять значения из ENUM
-        # Это сложная операция, требующая создания нового типа
-        return False, "Удаление значений из ENUM не поддерживается напрямую в PostgreSQL"
-
-    def add_composite_attribute(self, type_name: str, attribute_name: str,
-                                attribute_type: str) -> Tuple[bool, str]:
-        """Добавить атрибут в составной тип."""
-        # В PostgreSQL нельзя напрямую изменять составные типы
-        return False, "Изменение составных типов не поддерживается напрямую в PostgreSQL"
-
-    def drop_composite_attribute(self, type_name: str, attribute_name: str) -> Tuple[bool, str]:
-        """Удалить атрибут из составного типа."""
-        # В PostgreSQL нельзя напрямую изменять составные типы
-        return False, "Изменение составных типов не поддерживается напрямую в PostgreSQL"
 
     def drop_type(self, type_name: str) -> Tuple[bool, str]:
         """Удалить пользовательский тип."""

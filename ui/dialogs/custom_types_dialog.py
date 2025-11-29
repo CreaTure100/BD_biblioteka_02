@@ -132,11 +132,13 @@ class CustomTypesDialog(QDialog):
             return
 
         if type_kind == 'enum':
-            dialog = EditEnumDialog(type_info, self)
+            dialog = EditEnumDialog(type_info, self.db_connection, self)
         else:  # composite
-            dialog = EditCompositeDialog(type_info, self)
+            dialog = EditCompositeDialog(type_info, self.db_connection, self)
 
-        dialog.exec()
+        if dialog.exec():
+            # Обновляем таблицу после успешного редактирования
+            self.load_types()
 
     def delete_type(self):
         """Удаление выбранного типа."""
@@ -397,91 +399,285 @@ class AddAttributeDialog(QDialog):
 class EditEnumDialog(QDialog):
     """Диалог для редактирования ENUM типа."""
 
-    def __init__(self, type_info, parent=None):
+    def __init__(self, type_info, db_connection, parent=None):
         super().__init__(parent)
         self.type_info = type_info
+        self.db_connection = db_connection
+        self.types_manager = CustomTypesManager(db_connection)
         self.setWindowTitle(f"Редактировать ENUM: {type_info['name']}")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(500)
+        self.values = type_info.get('values', [])[:]  # Копируем значения
         self.setup_ui()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
-        # Отображаем текущие значения
-        values_group = QGroupBox("Текущие значения ENUM")
+        # Поле для имени типа
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Новое имя типа:"))
+        self.name_edit = QLineEdit(self.type_info['name'])
+        name_layout.addWidget(self.name_edit)
+        layout.addLayout(name_layout)
+
+        # Управление значениями
+        values_group = QGroupBox("Значения ENUM")
         values_layout = QVBoxLayout(values_group)
 
         self.values_list = QListWidget()
-        if 'values' in self.type_info:
-            for value in self.type_info['values']:
-                self.values_list.addItem(value)
+        for value in self.values:
+            self.values_list.addItem(value)
         values_layout.addWidget(self.values_list)
 
+        values_buttons_layout = QHBoxLayout()
+
+        self.add_value_btn = QPushButton("Добавить значение")
+        self.add_value_btn.clicked.connect(self.add_value)
+        values_buttons_layout.addWidget(self.add_value_btn)
+
+        self.remove_value_btn = QPushButton("Удалить значение")
+        self.remove_value_btn.clicked.connect(self.remove_value)
+        values_buttons_layout.addWidget(self.remove_value_btn)
+
+        self.edit_value_btn = QPushButton("Редактировать значение")
+        self.edit_value_btn.clicked.connect(self.edit_value)
+        values_buttons_layout.addWidget(self.edit_value_btn)
+
+        values_layout.addLayout(values_buttons_layout)
         layout.addWidget(values_group)
 
-        # Информация о том, что изменения ограничены в PostgreSQL
-        info_label = QLabel(
-            "В PostgreSQL добавление новых значений в ENUM возможно,\n"
-            "но удаление значений не поддерживается напрямую.\n"
-            "Для сложных изменений рекомендуется создать новый тип."
-        )
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
+        # Информация о миграции
+        if self.types_manager.is_type_used(self.type_info['name']):
+            info_label = QLabel(
+                "⚠️ ВНИМАНИЕ: Этот тип используется в таблицах. \n"
+                "Изменение приведет к созданию нового типа и миграции данных."
+            )
+            info_label.setStyleSheet("color: orange; font-weight: bold;")
+            layout.addWidget(info_label)
 
         # Кнопки
         buttons_layout = QHBoxLayout()
 
-        close_btn = QPushButton("Закрыть")
-        close_btn.clicked.connect(self.accept)
-        buttons_layout.addWidget(close_btn)
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(self.reject)
+        buttons_layout.addWidget(cancel_btn)
+
+        self.save_btn = QPushButton("Сохранить изменения")
+        self.save_btn.clicked.connect(self.save_changes)
+        buttons_layout.addWidget(self.save_btn)
 
         layout.addLayout(buttons_layout)
+
+    def add_value(self):
+        value, ok = QInputDialog.getText(self, "Добавить значение", "Введите значение ENUM:")
+        if ok and value.strip():
+            self.values.append(value.strip())
+            self.values_list.addItem(value.strip())
+
+    def remove_value(self):
+        current_row = self.values_list.currentRow()
+        if current_row >= 0:
+            self.values_list.takeItem(current_row)
+            self.values.pop(current_row)
+
+    def edit_value(self):
+        current_row = self.values_list.currentRow()
+        if current_row >= 0:
+            old_value = self.values[current_row]
+            new_value, ok = QInputDialog.getText(
+                self, "Редактировать значение",
+                "Введите новое значение:",
+                text=old_value
+            )
+            if ok and new_value.strip():
+                self.values[current_row] = new_value.strip()
+                self.values_list.currentItem().setText(new_value.strip())
+
+    def save_changes(self):
+        new_name = self.name_edit.text().strip()
+        if not new_name:
+            QMessageBox.warning(self, "Ошибка", "Введите имя типа")
+            return
+
+        if not self.values:
+            QMessageBox.warning(self, "Ошибка", "ENUM должен содержать хотя бы одно значение")
+            return
+
+        old_name = self.type_info['name']
+        old_values = self.type_info.get('values', [])
+
+        # Всегда используем подход с созданием нового типа для любых изменений
+        if new_name == old_name and self.values == old_values:
+            QMessageBox.information(self, "Информация", "Изменений не обнаружено")
+            return
+
+        # Для любых изменений (даже при том же имени) создаем новый тип
+        if new_name == old_name:
+            # Генерируем временное имя для нового типа
+            temp_name = f"{old_name}_new_{id(self)}"
+            success, message = self.types_manager.update_enum_type(old_name, temp_name, self.values)
+            if success:
+                # Переименовываем обратно
+                success, message = self.types_manager.update_enum_type(temp_name, old_name, self.values)
+        else:
+            # Создаем новый тип с новым именем
+            success, message = self.types_manager.update_enum_type(old_name, new_name, self.values)
+
+        if success:
+            QMessageBox.information(self, "Успех", "ENUM тип успешно обновлен")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось обновить тип: {message}")
 
 
 class EditCompositeDialog(QDialog):
     """Диалог для редактирования составного типа."""
 
-    def __init__(self, type_info, parent=None):
+    def __init__(self, type_info, db_connection, parent=None):
         super().__init__(parent)
         self.type_info = type_info
+        self.db_connection = db_connection
+        self.types_manager = CustomTypesManager(db_connection)
         self.setWindowTitle(f"Редактировать составной тип: {type_info['name']}")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(600)
+        self.attributes = [
+            {'name': attr['attribute_name'], 'type': attr['attribute_type']}
+            for attr in type_info.get('attributes', [])
+        ]
         self.setup_ui()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
-        # Отображаем текущие атрибуты
-        attrs_group = QGroupBox("Текущие атрибуты")
+        # Поле для имени типа
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Новое имя типа:"))
+        self.name_edit = QLineEdit(self.type_info['name'])
+        name_layout.addWidget(self.name_edit)
+        layout.addLayout(name_layout)
+
+        # Управление атрибутами
+        attrs_group = QGroupBox("Атрибуты составного типа")
         attrs_layout = QVBoxLayout(attrs_group)
 
         self.attrs_table = QTableWidget()
         self.attrs_table.setColumnCount(2)
         self.attrs_table.setHorizontalHeaderLabels(["Имя атрибута", "Тип данных"])
         self.attrs_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-
-        if 'attributes' in self.type_info:
-            self.attrs_table.setRowCount(len(self.type_info['attributes']))
-            for i, attr in enumerate(self.type_info['attributes']):
-                self.attrs_table.setItem(i, 0, QTableWidgetItem(attr['attribute_name']))
-                self.attrs_table.setItem(i, 1, QTableWidgetItem(attr['attribute_type']))
-
+        self.attrs_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.update_attributes_table()
         attrs_layout.addWidget(self.attrs_table)
+
+        attrs_buttons_layout = QHBoxLayout()
+
+        self.add_attr_btn = QPushButton("Добавить атрибут")
+        self.add_attr_btn.clicked.connect(self.add_attribute)
+        attrs_buttons_layout.addWidget(self.add_attr_btn)
+
+        self.remove_attr_btn = QPushButton("Удалить атрибут")
+        self.remove_attr_btn.clicked.connect(self.remove_attribute)
+        attrs_buttons_layout.addWidget(self.remove_attr_btn)
+
+        self.edit_attr_btn = QPushButton("Редактировать атрибут")
+        self.edit_attr_btn.clicked.connect(self.edit_attribute)
+        attrs_buttons_layout.addWidget(self.edit_attr_btn)
+
+        attrs_layout.addLayout(attrs_buttons_layout)
         layout.addWidget(attrs_group)
 
-        # Информация об ограничениях
-        info_label = QLabel(
-            "В PostgreSQL изменение составных типов не поддерживается напрямую.\n"
-            "Для изменений рекомендуется создать новый тип и перенести данные."
-        )
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
+        # Информация о миграции
+        if self.types_manager.is_type_used(self.type_info['name']):
+            info_label = QLabel(
+                "⚠️ ВНИМАНИЕ: Этот тип используется в таблицах. \n"
+                "Изменение приведет к созданию нового типа и миграции данных."
+            )
+            info_label.setStyleSheet("color: orange; font-weight: bold;")
+            layout.addWidget(info_label)
 
         # Кнопки
         buttons_layout = QHBoxLayout()
 
-        close_btn = QPushButton("Закрыть")
-        close_btn.clicked.connect(self.accept)
-        buttons_layout.addWidget(close_btn)
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(self.reject)
+        buttons_layout.addWidget(cancel_btn)
+
+        self.save_btn = QPushButton("Сохранить изменения")
+        self.save_btn.clicked.connect(self.save_changes)
+        buttons_layout.addWidget(self.save_btn)
 
         layout.addLayout(buttons_layout)
+
+    def update_attributes_table(self):
+        self.attrs_table.setRowCount(len(self.attributes))
+        for i, attr in enumerate(self.attributes):
+            self.attrs_table.setItem(i, 0, QTableWidgetItem(attr['name']))
+            self.attrs_table.setItem(i, 1, QTableWidgetItem(attr['type']))
+
+    def add_attribute(self):
+        dialog = AddAttributeDialog(self)
+        if dialog.exec():
+            attr_name, attr_type = dialog.get_data()
+            self.attributes.append({'name': attr_name, 'type': attr_type})
+            self.update_attributes_table()
+
+    def remove_attribute(self):
+        current_row = self.attrs_table.currentRow()
+        if current_row >= 0:
+            self.attributes.pop(current_row)
+            self.update_attributes_table()
+
+    def edit_attribute(self):
+        current_row = self.attrs_table.currentRow()
+        if current_row >= 0:
+            old_attr = self.attributes[current_row]
+            dialog = AddAttributeDialog(self)
+            dialog.name_edit.setText(old_attr['name'])
+            dialog.type_combo.setCurrentText(old_attr['type'])
+
+            if dialog.exec():
+                new_name, new_type = dialog.get_data()
+                self.attributes[current_row] = {'name': new_name, 'type': new_type}
+                self.update_attributes_table()
+
+    def save_changes(self):
+        new_name = self.name_edit.text().strip()
+        if not new_name:
+            QMessageBox.warning(self, "Ошибка", "Введите имя типа")
+            return
+
+        if not self.attributes:
+            QMessageBox.warning(self, "Ошибка", "Составной тип должен содержать хотя бы один атрибут")
+            return
+
+        # Проверяем, изменилось ли что-то
+        old_name = self.type_info['name']
+        old_attributes = [
+            {'name': attr['attribute_name'], 'type': attr['attribute_type']}
+            for attr in self.type_info.get('attributes', [])
+        ]
+
+        if new_name == old_name and self.attributes == old_attributes:
+            QMessageBox.information(self, "Информация", "Изменений не обнаружено")
+            return
+
+        # Подтверждение для используемых типов
+        if self.types_manager.is_type_used(old_name):
+            reply = QMessageBox.question(
+                self, "Подтверждение миграции",
+                f"Тип '{old_name}' используется в таблицах. \n"
+                f"Будет создан новый тип '{new_name}' и выполнена миграция данных. \n"
+                f"Продолжить?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        # Сохраняем изменения через создание нового типа
+        success, message = self.types_manager.update_composite_type(
+            old_name, new_name, self.attributes
+        )
+
+        if success:
+            QMessageBox.information(self, "Успех", "Составной тип успешно обновлен")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось обновить тип: {message}")
